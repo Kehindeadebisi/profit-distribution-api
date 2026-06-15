@@ -2,6 +2,8 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List
+import httpx
+import os
 
 app = FastAPI()
 
@@ -41,3 +43,33 @@ def calculate_distribution(data: SettlementInput):
         "total_contributions": total_contributions,
         "distributions": distributions
     }
+
+@app.post("/summarise")
+async def generate_summary(data: dict):
+    prompt = f"""You are writing a formal profit distribution notice for an Islamic investment 
+cooperative. Write a clear, professional 2-paragraph summary of the quarterly distribution 
+below. Use respectful language appropriate for a Muslim financial institution. 
+Note that distributions are calculated proportionally per member contribution (mudarabah). 
+Do not use interest-related language.
+
+Distribution data:
+Period: {data['period']}
+Total Profit Pool: {data['total_profit_pool']}
+Investor Share ({data['investor_ratio']*100}%): {data['investor_profit']}
+Number of members: {len(data['distributions'])}
+"""
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={os.environ['GEMINI_API_KEY']}",
+            headers={"Content-Type": "application/json"},
+            json={
+                "contents": [{
+                    "parts": [{"text": prompt}]
+                }]
+            }
+        )
+
+    result = response.json()
+    summary_text = result["candidates"][0]["content"]["parts"][0]["text"]
+    return {"summary": summary_text}
