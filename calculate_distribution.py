@@ -4,6 +4,10 @@ from pydantic import BaseModel
 from typing import List
 import httpx
 import os
+from fastapi.responses import Response
+from weasyprint import HTML
+from jinja2 import Template
+
 
 app = FastAPI()
 
@@ -101,3 +105,42 @@ Number of members: {len(distributions)}
         }
 
     return {"summary": summary_text}
+
+REPORT_TEMPLATE = """
+<!DOCTYPE html><html><head>
+<style>
+  body { font-family: Arial, sans-serif; padding: 48px; color: #1a1a1a; }
+  h1 { color: #1a3a2a; border-bottom: 3px solid #b8963e; padding-bottom: 12px; }
+  .ai-summary { background: #f9f6f0; padding: 20px 24px; 
+                border-left: 4px solid #b8963e; margin: 24px 0; line-height: 1.7; }
+  table { width: 100%; border-collapse: collapse; margin-top: 24px; }
+  th { background: #1a3a2a; color: white; padding: 12px; text-align: left; }
+  td { padding: 10px 12px; border-bottom: 1px solid #e0d8c8; }
+  tr:nth-child(even) { background: #faf8f4; }
+  .footer { margin-top: 48px; font-size: 11px; color: #999; border-top: 1px solid #e0d8c8; padding-top: 12px; }
+</style></head><body>
+  <h1>Profit Distribution Notice</h1>
+  <p><strong>Period:</strong> {{ period }} &nbsp;|&nbsp; 
+     <strong>Total Pool:</strong> ₦{{ "{:,.0f}".format(total_profit_pool) }}</p>
+  <div class="ai-summary">{{ ai_summary }}</div>
+  <table>
+    <tr><th>Member</th><th>Contribution</th><th>Share</th><th>Profit Amount</th></tr>
+    {% for d in distributions %}
+    <tr>
+      <td>{{ d.name }}</td>
+      <td>₦{{ "{:,.0f}".format(d.contribution) }}</td>
+      <td>{{ d.percentage }}%</td>
+      <td><strong>₦{{ "{:,.2f}".format(d.profit_share) }}</strong></td>
+    </tr>
+    {% endfor %}
+  </table>
+  <div class="footer">Auto-generated | {{ period }} | Barakallahu feekum</div>
+</body></html>
+"""
+
+@app.post("/generate-pdf")
+def generate_pdf(data: dict):
+    html = Template(REPORT_TEMPLATE).render(**data)
+    pdf_bytes = HTML(string=html).write_pdf()
+    return Response(content=pdf_bytes, media_type="application/pdf",
+                    headers={"Content-Disposition": f"attachment; filename=distribution_{data['period']}.pdf"})
