@@ -48,7 +48,6 @@ def calculate_distribution(data: SettlementInput):
 
 @app.post("/summarise")
 async def generate_summary(data: dict):
-    # Safely convert all numeric fields — prevents crash if they arrive as strings
     period = str(data.get('period', ''))
     total_profit_pool = float(data.get('total_profit_pool', 0))
     investor_profit = float(data.get('investor_profit', 0))
@@ -70,30 +69,34 @@ Number of members: {len(distributions)}
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={os.environ['GEMINI_API_KEY']}",
-            headers={"Content-Type": "application/json"},
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {os.environ['GROQ_API_KEY']}",
+                "Content-Type": "application/json"
+            },
             json={
-                "contents": [{
-                    "parts": [{"text": prompt}]
-                }]
+                "model": "llama-3.1-8b-instant",
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "max_tokens": 500,
+                "temperature": 0.7
             }
         )
 
-    # Check Gemini responded correctly before parsing
     if response.status_code != 200:
         return {
-            "error": f"Gemini API error: {response.status_code}",
+            "error": f"Groq API error: {response.status_code}",
             "detail": response.text
         }
 
     result = response.json()
 
-    # Guard against unexpected Gemini response structure
     try:
-        summary_text = result["candidates"][0]["content"]["parts"][0]["text"]
-    except (KeyError, IndexError) as e:
+        summary_text = result["choices"][0]["message"]["content"]
+    except (KeyError, IndexError):
         return {
-            "error": "Could not parse Gemini response",
+            "error": "Could not parse Groq response",
             "raw": result
         }
 
