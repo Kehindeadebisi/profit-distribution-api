@@ -48,6 +48,13 @@ def calculate_distribution(data: SettlementInput):
 
 @app.post("/summarise")
 async def generate_summary(data: dict):
+    # Safely convert all numeric fields — prevents crash if they arrive as strings
+    period = str(data.get('period', ''))
+    total_profit_pool = float(data.get('total_profit_pool', 0))
+    investor_profit = float(data.get('investor_profit', 0))
+    investor_ratio = float(data.get('investor_ratio', 0))
+    distributions = data.get('distributions', [])
+
     prompt = f"""You are writing a formal profit distribution notice for an Islamic investment 
 cooperative. Write a clear, professional 2-paragraph summary of the quarterly distribution 
 below. Use respectful language appropriate for a Muslim financial institution. 
@@ -55,10 +62,10 @@ Note that distributions are calculated proportionally per member contribution (m
 Do not use interest-related language.
 
 Distribution data:
-Period: {data['period']}
-Total Profit Pool: {data['total_profit_pool']}
-Investor Share ({data['investor_ratio']*100}%): {data['investor_profit']}
-Number of members: {len(data['distributions'])}
+Period: {period}
+Total Profit Pool: ₦{total_profit_pool:,.2f}
+Investor Share ({investor_ratio * 100:.0f}%): ₦{investor_profit:,.2f}
+Number of members: {len(distributions)}
 """
 
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -72,6 +79,22 @@ Number of members: {len(data['distributions'])}
             }
         )
 
+    # Check Gemini responded correctly before parsing
+    if response.status_code != 200:
+        return {
+            "error": f"Gemini API error: {response.status_code}",
+            "detail": response.text
+        }
+
     result = response.json()
-    summary_text = result["candidates"][0]["content"]["parts"][0]["text"]
+
+    # Guard against unexpected Gemini response structure
+    try:
+        summary_text = result["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError) as e:
+        return {
+            "error": "Could not parse Gemini response",
+            "raw": result
+        }
+
     return {"summary": summary_text}
