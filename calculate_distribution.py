@@ -40,9 +40,11 @@ def calculate_distribution(data: SettlementInput):
         "period": data.period,
         "total_profit_pool": data.profit_pool,
         "investor_profit": round(investor_profit, 2),
+        "investor_ratio": data.investor_ratio,
         "total_contributions": total_contributions,
         "distributions": distributions
     }
+
 
 @app.post("/summarise")
 async def generate_summary(data: dict):
